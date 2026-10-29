@@ -1,0 +1,28 @@
+[
+  {
+    "id": 5007,
+    "run_id": 1004,
+    "name": "test",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-10-20T12:00:00Z",
+    "completed_at": "2026-10-20T12:05:00Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "html_url": "https://github.com/acme/shop/actions/runs/1004/job/5007"
+  },
+  {
+    "id": 5008,
+    "run_id": 1004,
+    "name": "Build app",
+    "status": "completed",
+    "conclusion": "failure",
+    "started_at": "2026-10-20T12:00:00Z",
+    "completed_at": "2026-10-20T12:02:00Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "html_url": "https://github.com/acme/shop/actions/runs/1004/job/5008"
+  }
+]

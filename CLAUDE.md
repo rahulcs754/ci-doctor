@@ -15,7 +15,8 @@ Node 22, ESM, TypeScript strict. @octokit/rest, `yaml` (keeps comments), command
 - Never print secrets from logs. Mask anything that looks like a token before showing or sending to Claude.
 
 ## Commands
-- `npm test`, `npm run build`, `npm run dev -- scan --repo owner/name`
+- `npm test`, `npm run lint`, `npm run build` (commit `dist/action.js` after changing src)
+- `npm run dev -- --fixtures test/fixtures/sample scan` runs offline on sample data
 
 ## Owner
 Senior React/Next.js dev, India. Wants short, simple English and a clean portfolio-grade repo.

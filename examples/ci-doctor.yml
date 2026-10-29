@@ -1,0 +1,19 @@
+# Copy to .github/workflows/ci-doctor.yml. Runs every Monday and writes the report to the job summary.
+name: CI Doctor
+on:
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: rahulcs754/ci-doctor@main
+        with:
+          days: 30

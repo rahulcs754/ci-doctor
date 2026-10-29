@@ -1,4 +1,6 @@
 node_modules
-dist
+# dist/action.js is committed so the GitHub Action runs without a build step.
+dist/*
+!dist/action.js
 .env
 coverage
