@@ -1,0 +1,33 @@
+name: CI Doctor
+description: Ranks slow and costly GitHub Actions workflows and lists YAML fixes in the job summary.
+branding:
+  icon: activity
+  color: green
+inputs:
+  github-token:
+    description: Token that can read Actions runs (actions:read, contents:read).
+    default: ${{ github.token }}
+  repo:
+    description: owner/name to scan. Defaults to the current repo.
+    required: false
+  days:
+    description: How many days of runs to read.
+    default: "30"
+  max-runs:
+    description: Stop after this many runs (each run costs one API call).
+    default: "300"
+  fail-on-findings:
+    description: Fail the job when a fixable finding exists.
+    default: "false"
+outputs:
+  minutes:
+    description: Billable minutes in the window.
+  cost:
+    description: Estimated cost in USD at list price.
+  findings:
+    description: Number of findings.
+  report:
+    description: The Markdown report.
+runs:
+  using: node24
+  main: dist/action.js

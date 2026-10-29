@@ -1,0 +1,11 @@
+2026-10-20T13:00:01.0000000Z ##[group]Run npm ci
+2026-10-20T13:00:01.0500000Z npm ci
+2026-10-20T13:00:01.0600000Z env:
+2026-10-20T13:00:01.0700000Z   NPM_TOKEN: npm_FAKEFAKEFAKEFAKEFAKE00
+2026-10-20T13:00:09.0000000Z npm error code ERESOLVE
+2026-10-20T13:00:09.0100000Z npm error ERESOLVE could not resolve
+2026-10-20T13:00:09.0200000Z npm error While resolving: shop@1.0.0
+2026-10-20T13:00:09.0300000Z npm error Found: react@19.2.0
+2026-10-20T13:00:09.0400000Z npm error Could not resolve dependency:
+2026-10-20T13:00:09.0500000Z npm error peer react@"^18.0.0" from old-carousel@2.1.0
+2026-10-20T13:00:10.0000000Z ##[error]Process completed with exit code 1.
