@@ -1,0 +1,15 @@
+[
+  {
+    "id": 5016,
+    "run_id": 1011,
+    "name": "publish",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-10-21T01:00:00Z",
+    "completed_at": "2026-10-21T01:03:00Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "html_url": "https://github.com/acme/shop/actions/runs/1011/job/5016"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "id": 5012,
+    "run_id": 1007,
+    "name": "e2e",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-10-20T16:40:00Z",
+    "completed_at": "2026-10-20T17:15:00Z",
+    "labels": [
+      "macos-latest"
+    ],
+    "html_url": "https://github.com/acme/shop/actions/runs/1007/job/5012"
+  }
+]

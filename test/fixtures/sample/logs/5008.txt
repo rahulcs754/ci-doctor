@@ -1,0 +1,9 @@
+2026-10-20T12:00:01.0000000Z ##[group]Run pnpm build
+2026-10-20T12:00:01.1000000Z [36;1mpnpm build[0m
+2026-10-20T12:00:05.0000000Z > shop@1.0.0 build /home/runner/work/shop
+2026-10-20T12:00:05.1000000Z > tsc --noEmit && next build
+2026-10-20T12:00:20.0000000Z src/cart/total.ts(14,7): error TS2322: Type 'string' is not assignable to type 'number'.
+2026-10-20T12:00:20.0100000Z src/cart/total.ts(22,3): error TS2345: Argument of type 'undefined' is not assignable to parameter of type 'Item'.
+2026-10-20T12:00:20.1000000Z Found 2 errors in the same file, starting at: src/cart/total.ts:14
+2026-10-20T12:00:20.2000000Z  ELIFECYCLE  Command failed with exit code 2.
+2026-10-20T12:00:20.3000000Z ##[error]Process completed with exit code 2.
