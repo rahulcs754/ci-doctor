@@ -79,7 +79,7 @@ steps:
 - Costs use GitHub list prices in [src/pricing.ts](src/pricing.ts). Free plan minutes are not subtracted.
 - Savings are estimates: superseded runs are measured, cache savings assume 30 s per job run.
 - `--record <dir>` saves API responses in the fixture layout, for tests and demos.
-- Plan: [docs/MVP-PLAN.md](docs/MVP-PLAN.md). Later, the core can power a "CI cost" tab in TokenLens.
+- Later, the core can power a "CI cost" tab in TokenLens.
 
 ## License
 
