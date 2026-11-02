@@ -19,6 +19,9 @@ inputs:
   fail-on-findings:
     description: Fail the job when a fixable finding exists.
     default: "false"
+  max-queue-minutes:
+    description: Fail the job when the p95 queue wait (minutes a job waits for a runner) is above this. 0 = never.
+    default: "0"
 outputs:
   minutes:
     description: Billable minutes in the window.
@@ -26,6 +29,10 @@ outputs:
     description: Estimated cost in USD at list price.
   findings:
     description: Number of findings.
+  queue-p50-minutes:
+    description: Typical (p50) minutes a job waited for a runner.
+  queue-p95-minutes:
+    description: p95 minutes a job waited for a runner.
   report:
     description: The Markdown report.
 runs:

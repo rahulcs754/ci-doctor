@@ -30640,6 +30640,7 @@ function scanMarkdown(r, repo) {
     `# CI Doctor report: ${repo}`,
     "",
     `Last ${r.days} days, ${r.runs} runs, **${minutes} billable minutes**, about **${money(cost)}** at list price.`,
+    ...r.queue.jobs ? [`Jobs waited for a runner **${r.queue.p50Minutes} min** typical (p50), **${r.queue.p95Minutes} min** at p95, ${r.queue.maxMinutes} min worst.`] : [],
     r.findings.length ? `${r.findings.length} findings. The ones we can measure would have saved about **${saved} minutes**.` : "No findings. Nice.",
     "",
     "## Workflows",
@@ -30660,6 +30661,7 @@ function scanMarkdown(r, repo) {
       ""
     );
   }
+  out.push(...queueSection(r));
   if (r.findings.length) {
     out.push(
       "## Findings",
@@ -30678,9 +30680,24 @@ function scanMarkdown(r, repo) {
   out.push("", "_Costs use GitHub list prices from `src/pricing.ts`. Free plan minutes are not subtracted. Savings are estimates._");
   return out.join("\n") + "\n";
 }
-
-// src/rules/index.ts
-var import_yaml2 = __toESM(require_dist(), 1);
+function queueSection(r) {
+  const q = r.queue;
+  if (!q.jobs) return [];
+  const hours = (m) => m >= 60 ? `${(m / 60).toFixed(1)} h` : `${m} min`;
+  const out = [
+    "## Queue wait",
+    "",
+    "Time each job waited for a runner before it started. Waiting is not billed, but it is time a PR (or an agent) sits idle.",
+    "",
+    "| Runner | Jobs | p50 min | p95 min | Max min | Total wait |",
+    "|---|---:|---:|---:|---:|---:|",
+    ...q.byRunner.map((g) => `| ${cell(g.runner)} | ${g.jobs} | ${g.p50Minutes} | ${g.p95Minutes} | ${g.maxMinutes} | ${hours(g.totalMinutes)} |`),
+    ""
+  ];
+  if (q.peak) out.push(`Busiest hour: **${String(q.peak.hour).padStart(2, "0")}:00 UTC**, p95 wait ${q.peak.p95Minutes} min over ${q.peak.jobs} jobs.`, "");
+  if (q.advice.length) out.push(...q.advice.map((a) => `- \u26A0\uFE0F ${a}`), "");
+  return out;
+}
 
 // src/pricing.ts
 var RATES = {
@@ -30699,6 +30716,151 @@ function runnerOs(labels) {
 function billableMinutes(seconds2) {
   return Math.max(1, Math.ceil(seconds2 / 60));
 }
+
+// src/stats.ts
+var seconds = (from, to) => from && to ? Math.max(0, (Date.parse(to) - Date.parse(from)) / 1e3) : 0;
+function baseJobName(name) {
+  return name.replace(/\s*\(.*\)\s*$/, "").trim();
+}
+function percentile(values, p) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const i = Math.min(sorted.length - 1, Math.ceil(p / 100 * sorted.length) - 1);
+  return sorted[Math.max(0, i)];
+}
+var round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
+function buildStats(runs, jobsByRun) {
+  const byPath = /* @__PURE__ */ new Map();
+  for (const run of runs) {
+    const list = byPath.get(run.path) ?? [];
+    list.push(run);
+    byPath.set(run.path, list);
+  }
+  const result = [];
+  for (const [path, wfRuns] of byPath) {
+    const jobs = /* @__PURE__ */ new Map();
+    const runMinutes = /* @__PURE__ */ new Map();
+    let minutes = 0;
+    let cost = 0;
+    for (const run of wfRuns) {
+      let thisRun = 0;
+      for (const job of jobsByRun.get(run.id) ?? []) {
+        if (!job.started_at || !job.completed_at || job.conclusion === "skipped") continue;
+        const os5 = runnerOs(job.labels);
+        const secs = seconds(job.started_at, job.completed_at);
+        const billed = billableMinutes(secs);
+        const name = baseJobName(job.name);
+        const stats = jobs.get(name) ?? { name, os: os5, runs: 0, minutes: 0, cost: 0, p95Minutes: 0, maxMinutes: 0, durations: [] };
+        stats.runs += 1;
+        stats.minutes += billed;
+        stats.cost += billed * RATES[os5];
+        stats.durations.push(round(secs / 60));
+        jobs.set(name, stats);
+        thisRun += billed;
+        minutes += billed;
+        cost += billed * RATES[os5];
+      }
+      runMinutes.set(run.id, thisRun);
+    }
+    for (const j of jobs.values()) {
+      j.cost = round(j.cost);
+      j.p95Minutes = round(percentile(j.durations, 95));
+      j.maxMinutes = round(Math.max(0, ...j.durations));
+    }
+    result.push({
+      path,
+      name: wfRuns[0].name,
+      runs: wfRuns.length,
+      failed: wfRuns.filter((r) => r.conclusion === "failure" || r.conclusion === "timed_out").length,
+      minutes,
+      cost: round(cost),
+      supersededMinutes: supersededMinutes(wfRuns, runMinutes),
+      jobs: [...jobs.values()].sort((a, b) => b.cost - a.cost || b.minutes - a.minutes)
+    });
+  }
+  return result.sort((a, b) => b.cost - a.cost || b.minutes - a.minutes);
+}
+function supersededMinutes(runs, runMinutes) {
+  const prRuns = runs.filter((r) => r.event === "pull_request" && r.head_branch);
+  let total = 0;
+  for (const run of prRuns) {
+    const finished = Date.parse(run.updated_at);
+    const started = Date.parse(run.run_started_at);
+    const newer = prRuns.some(
+      (o) => o.id !== run.id && o.head_branch === run.head_branch && Date.parse(o.run_started_at) > started && Date.parse(o.run_started_at) < finished
+    );
+    if (newer) total += runMinutes.get(run.id) ?? 0;
+  }
+  return total;
+}
+
+// src/queue.ts
+var SLOW_QUEUE_MINUTES = 10;
+var round2 = (n) => Math.round(n * 10) / 10;
+function queueMinutes(job) {
+  if (!job.created_at || !job.started_at || job.conclusion === "skipped") return null;
+  const ms = Date.parse(job.started_at) - Date.parse(job.created_at);
+  return Number.isFinite(ms) ? Math.max(0, ms / 6e4) : null;
+}
+function runnerLabel(labels) {
+  if (!labels.length) return "unknown";
+  const self = labels.findIndex((l) => l.toLowerCase() === "self-hosted");
+  if (self >= 0) {
+    const extra = labels.find((l, i) => i !== self && !/^(linux|windows|macos|x64|arm64)$/i.test(l));
+    return extra ? `self-hosted (${extra})` : "self-hosted";
+  }
+  return labels[0];
+}
+function summarize(waits) {
+  return {
+    p50Minutes: round2(percentile(waits, 50)),
+    p95Minutes: round2(percentile(waits, 95)),
+    maxMinutes: round2(Math.max(0, ...waits)),
+    totalMinutes: Math.round(waits.reduce((s, w) => s + w, 0))
+  };
+}
+function buildQueueStats(runs, jobsByRun) {
+  const all = [];
+  const byRunner = /* @__PURE__ */ new Map();
+  const byHour = /* @__PURE__ */ new Map();
+  for (const run of runs) {
+    for (const job of jobsByRun.get(run.id) ?? []) {
+      const wait = queueMinutes(job);
+      if (wait == null) continue;
+      all.push(wait);
+      const label = runnerLabel(job.labels);
+      byRunner.set(label, [...byRunner.get(label) ?? [], wait]);
+      const hour = new Date(job.created_at).getUTCHours();
+      byHour.set(hour, [...byHour.get(hour) ?? [], wait]);
+    }
+  }
+  const groups = [...byRunner].map(([runner, waits]) => ({ runner, jobs: waits.length, ...summarize(waits) }));
+  groups.sort((a, b) => b.p95Minutes - a.p95Minutes || b.totalMinutes - a.totalMinutes);
+  let peak;
+  for (const [hour, waits] of byHour) {
+    if (waits.length < 3) continue;
+    const p95 = round2(percentile(waits, 95));
+    if (!peak || p95 > peak.p95Minutes) peak = { hour, jobs: waits.length, p95Minutes: p95 };
+  }
+  const overall = summarize(all);
+  return { jobs: all.length, ...overall, byRunner: groups, peak, advice: advise(overall.p95Minutes, groups) };
+}
+function advise(p95, groups) {
+  const slow = groups.filter((g) => g.p95Minutes >= SLOW_QUEUE_MINUTES);
+  if (!slow.length && p95 < SLOW_QUEUE_MINUTES) return [];
+  const out = [];
+  for (const g of slow) {
+    const where = g.runner.startsWith("self-hosted") ? "Add runners to this pool or turn on autoscaling (for example actions-runner-controller)." : /macos|windows/i.test(g.runner) ? "macOS and Windows hosted runners have small concurrency limits. Move jobs that do not need this OS to Linux." : "You may be at your plan's concurrent job limit. Larger runners or a higher plan raise it.";
+    out.push(`\`${g.runner}\`: p95 wait ${g.p95Minutes} min (max ${g.maxMinutes}). ${where}`);
+  }
+  out.push(
+    "Cut queue load from many PRs and agent pushes: add `concurrency` with `cancel-in-progress` on PR workflows (the `no-concurrency` fix), skip docs-only changes (`no-path-filter`), and batch merges with a merge queue."
+  );
+  return out;
+}
+
+// src/rules/index.ts
+var import_yaml2 = __toESM(require_dist(), 1);
 
 // src/workflow.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -30962,6 +31124,7 @@ var pickJob = (j) => ({
   name: j.name,
   status: j.status,
   conclusion: j.conclusion,
+  created_at: j.created_at ?? null,
   started_at: j.started_at,
   completed_at: j.completed_at,
   labels: j.labels ?? [],
@@ -31033,83 +31196,6 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-// src/stats.ts
-var seconds = (from, to) => from && to ? Math.max(0, (Date.parse(to) - Date.parse(from)) / 1e3) : 0;
-function baseJobName(name) {
-  return name.replace(/\s*\(.*\)\s*$/, "").trim();
-}
-function percentile(values, p) {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const i = Math.min(sorted.length - 1, Math.ceil(p / 100 * sorted.length) - 1);
-  return sorted[Math.max(0, i)];
-}
-var round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
-function buildStats(runs, jobsByRun) {
-  const byPath = /* @__PURE__ */ new Map();
-  for (const run of runs) {
-    const list = byPath.get(run.path) ?? [];
-    list.push(run);
-    byPath.set(run.path, list);
-  }
-  const result = [];
-  for (const [path, wfRuns] of byPath) {
-    const jobs = /* @__PURE__ */ new Map();
-    const runMinutes = /* @__PURE__ */ new Map();
-    let minutes = 0;
-    let cost = 0;
-    for (const run of wfRuns) {
-      let thisRun = 0;
-      for (const job of jobsByRun.get(run.id) ?? []) {
-        if (!job.started_at || !job.completed_at || job.conclusion === "skipped") continue;
-        const os5 = runnerOs(job.labels);
-        const secs = seconds(job.started_at, job.completed_at);
-        const billed = billableMinutes(secs);
-        const name = baseJobName(job.name);
-        const stats = jobs.get(name) ?? { name, os: os5, runs: 0, minutes: 0, cost: 0, p95Minutes: 0, maxMinutes: 0, durations: [] };
-        stats.runs += 1;
-        stats.minutes += billed;
-        stats.cost += billed * RATES[os5];
-        stats.durations.push(round(secs / 60));
-        jobs.set(name, stats);
-        thisRun += billed;
-        minutes += billed;
-        cost += billed * RATES[os5];
-      }
-      runMinutes.set(run.id, thisRun);
-    }
-    for (const j of jobs.values()) {
-      j.cost = round(j.cost);
-      j.p95Minutes = round(percentile(j.durations, 95));
-      j.maxMinutes = round(Math.max(0, ...j.durations));
-    }
-    result.push({
-      path,
-      name: wfRuns[0].name,
-      runs: wfRuns.length,
-      failed: wfRuns.filter((r) => r.conclusion === "failure" || r.conclusion === "timed_out").length,
-      minutes,
-      cost: round(cost),
-      supersededMinutes: supersededMinutes(wfRuns, runMinutes),
-      jobs: [...jobs.values()].sort((a, b) => b.cost - a.cost || b.minutes - a.minutes)
-    });
-  }
-  return result.sort((a, b) => b.cost - a.cost || b.minutes - a.minutes);
-}
-function supersededMinutes(runs, runMinutes) {
-  const prRuns = runs.filter((r) => r.event === "pull_request" && r.head_branch);
-  let total = 0;
-  for (const run of prRuns) {
-    const finished = Date.parse(run.updated_at);
-    const started = Date.parse(run.run_started_at);
-    const newer = prRuns.some(
-      (o) => o.id !== run.id && o.head_branch === run.head_branch && Date.parse(o.run_started_at) > started && Date.parse(o.run_started_at) < finished
-    );
-    if (newer) total += runMinutes.get(run.id) ?? 0;
-  }
-  return total;
-}
-
 // src/scan.ts
 async function scan(source, opts) {
   const [runs, files] = await Promise.all([source.listRuns(opts.days, opts.maxRuns), source.listWorkflowFiles()]);
@@ -31125,7 +31211,7 @@ async function scan(source, opts) {
       skipped.push({ path: f.path, reason: e.message });
     }
   }
-  return { days: opts.days, runs: runs.length, stats, files, findings: runRules(parsed, stats, opts.rules), skipped };
+  return { days: opts.days, runs: runs.length, stats, queue: buildQueueStats(runs, jobsByRun), files, findings: runRules(parsed, stats, opts.rules), skipped };
 }
 
 // src/action.ts
@@ -31141,7 +31227,13 @@ async function main() {
   setOutput("minutes", result.stats.reduce((s, w) => s + w.minutes, 0));
   setOutput("cost", result.stats.reduce((s, w) => s + w.cost, 0).toFixed(2));
   setOutput("findings", result.findings.length);
+  setOutput("queue-p50-minutes", result.queue.p50Minutes);
+  setOutput("queue-p95-minutes", result.queue.p95Minutes);
   setOutput("report", md);
+  const maxQueue = Number(getInput("max-queue-minutes") || 0);
+  if (maxQueue > 0 && result.queue.p95Minutes > maxQueue) {
+    setFailed(`CI queue p95 wait is ${result.queue.p95Minutes} min, above max-queue-minutes (${maxQueue}).`);
+  }
   if (getBooleanInput("fail-on-findings") && result.findings.some((f) => f.level === "fix")) {
     setFailed(`CI Doctor found ${result.findings.length} issue(s). See the job summary.`);
   }

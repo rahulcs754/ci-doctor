@@ -2,7 +2,7 @@
 
 Find out why your GitHub Actions are slow, costly or failing, and get a PR that fixes the YAML.
 
-- **`scan`** ranks workflows and jobs by billable minutes and cost, and lists fixes.
+- **`scan`** ranks workflows and jobs by billable minutes and cost, shows **CI queue wait time**, and lists fixes.
 - **`why <run-id>`** reads the failed job logs and tells you what broke and how to fix it.
 - **`fix`** shows the YAML diff, writes it locally, or opens a PR.
 
@@ -45,6 +45,21 @@ src/cart/total.ts(14,7): error TS2322: Type 'string' is not assignable to type '
 Fix: Run `tsc --noEmit` locally and fix the listed errors.
 This workflow failed 2 of 5 runs in the last 30 days.
 ```
+
+## Queue wait
+
+Waiting for a runner is not billed, so it hides in cost reports. With many PRs and agent pushes it can reach 30-45 minutes. `scan` shows how long jobs waited (`started_at - created_at`), per runner pool, plus the busiest hour:
+
+```text
+| Runner        | Jobs | p50 min | p95 min | Max min | Total wait |
+| macos-latest  |    5 |      25 |      45 |      45 |      2.1 h |
+| ubuntu-latest |   10 |     0.4 |     1.5 |     1.5 |      6 min |
+
+⚠️ macos-latest: p95 wait 45 min. macOS and Windows hosted runners have small concurrency
+   limits. Move jobs that do not need this OS to Linux.
+```
+
+In the Action, `queue-p50-minutes` and `queue-p95-minutes` are outputs, and `max-queue-minutes: 20` fails the job when p95 wait goes above 20 minutes.
 
 ## Fix rules
 

@@ -45,6 +45,7 @@ const pickJob = (j: Record<string, any>): Job => ({
   name: j.name,
   status: j.status,
   conclusion: j.conclusion,
+  created_at: j.created_at ?? null,
   started_at: j.started_at,
   completed_at: j.completed_at,
   labels: j.labels ?? [],
