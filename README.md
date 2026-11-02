@@ -82,12 +82,38 @@ out of memory, timeout, missing secret, network (flaky), dependency install, Typ
 Weekly report in the job summary: see [examples/ci-doctor.yml](examples/ci-doctor.yml).
 
 ```yaml
+on:
+  schedule:
+    - cron: "30 3 * * 1"   # every Monday
+  workflow_dispatch:
 permissions:
   actions: read
   contents: read
-steps:
-  - uses: rahulcs754/ci-doctor@main
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rahulcs754/ci-doctor@main
+        with:
+          days: 30
+          max-queue-minutes: 20   # optional: fail when p95 queue wait is above 20 min
 ```
+
+| Input | Default | What it does |
+|---|---|---|
+| `github-token` | `github.token` | Needs `actions: read` and `contents: read` |
+| `repo` | current repo | `owner/name` to scan |
+| `days` | `30` | How many days of runs to read |
+| `max-runs` | `300` | Stop after this many runs (one API call each) |
+| `fail-on-findings` | `false` | Fail when a fixable finding exists |
+| `max-queue-minutes` | `0` | Fail when the p95 queue wait is above this. `0` = never |
+
+| Output | What it is |
+|---|---|
+| `minutes`, `cost` | Billable minutes and estimated USD in the window |
+| `findings` | Number of findings |
+| `queue-p50-minutes`, `queue-p95-minutes` | Typical and p95 minutes a job waited for a runner |
+| `report` | The Markdown report |
 
 ## Notes
 
@@ -95,6 +121,15 @@ steps:
 - Savings are estimates: superseded runs are measured, cache savings assume 30 s per job run.
 - `--record <dir>` saves API responses in the fixture layout, for tests and demos.
 - Later, the core can power a "CI cost" tab in TokenLens.
+
+## Develop
+
+```bash
+npm install
+npm test        # vitest, runs on the recorded fixtures (no network)
+npm run lint    # type check
+npm run build   # bundles dist/ (commit dist/action.js; the Action runs it)
+```
 
 ## License
 
