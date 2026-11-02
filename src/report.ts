@@ -14,6 +14,7 @@ export function scanMarkdown(r: ScanResult, repo: string): string {
     `# CI Doctor report: ${repo}`,
     "",
     `Last ${r.days} days, ${r.runs} runs, **${minutes} billable minutes**, about **${money(cost)}** at list price.`,
+    ...(r.queue.jobs ? [`Jobs waited for a runner **${r.queue.p50Minutes} min** typical (p50), **${r.queue.p95Minutes} min** at p95, ${r.queue.maxMinutes} min worst.`] : []),
     r.findings.length ? `${r.findings.length} findings. The ones we can measure would have saved about **${saved} minutes**.` : "No findings. Nice.",
     "",
     "## Workflows",
@@ -39,6 +40,8 @@ export function scanMarkdown(r: ScanResult, repo: string): string {
     );
   }
 
+  out.push(...queueSection(r));
+
   if (r.findings.length) {
     out.push(
       "## Findings",
@@ -56,6 +59,25 @@ export function scanMarkdown(r: ScanResult, repo: string): string {
   for (const s of r.skipped) out.push(`> Skipped \`${s.path}\`: ${s.reason}`);
   out.push("", "_Costs use GitHub list prices from `src/pricing.ts`. Free plan minutes are not subtracted. Savings are estimates._");
   return out.join("\n") + "\n";
+}
+
+function queueSection(r: ScanResult): string[] {
+  const q = r.queue;
+  if (!q.jobs) return [];
+  const hours = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1)} h` : `${m} min`);
+  const out = [
+    "## Queue wait",
+    "",
+    "Time each job waited for a runner before it started. Waiting is not billed, but it is time a PR (or an agent) sits idle.",
+    "",
+    "| Runner | Jobs | p50 min | p95 min | Max min | Total wait |",
+    "|---|---:|---:|---:|---:|---:|",
+    ...q.byRunner.map((g) => `| ${cell(g.runner)} | ${g.jobs} | ${g.p50Minutes} | ${g.p95Minutes} | ${g.maxMinutes} | ${hours(g.totalMinutes)} |`),
+    "",
+  ];
+  if (q.peak) out.push(`Busiest hour: **${String(q.peak.hour).padStart(2, "0")}:00 UTC**, p95 wait ${q.peak.p95Minutes} min over ${q.peak.jobs} jobs.`, "");
+  if (q.advice.length) out.push(...q.advice.map((a) => `- ⚠️ ${a}`), "");
+  return out;
 }
 
 export function whyMarkdown(r: WhyResult): string {

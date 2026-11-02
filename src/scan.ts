@@ -1,3 +1,4 @@
+import { buildQueueStats, type QueueStats } from "./queue.js";
 import { runRules } from "./rules/index.js";
 import { mapLimit, type CiSource } from "./source.js";
 import { buildStats } from "./stats.js";
@@ -14,6 +15,8 @@ export interface ScanResult {
   days: number;
   runs: number;
   stats: WorkflowStats[];
+  /** How long jobs waited for a runner. */
+  queue: QueueStats;
   files: WorkflowFile[];
   findings: Finding[];
   /** Files we could not parse, with the reason. */
@@ -36,5 +39,5 @@ export async function scan(source: CiSource, opts: ScanOptions): Promise<ScanRes
     }
   }
 
-  return { days: opts.days, runs: runs.length, stats, files, findings: runRules(parsed, stats, opts.rules), skipped };
+  return { days: opts.days, runs: runs.length, stats, queue: buildQueueStats(runs, jobsByRun), files, findings: runRules(parsed, stats, opts.rules), skipped };
 }

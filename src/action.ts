@@ -18,7 +18,14 @@ async function main() {
   core.setOutput("minutes", result.stats.reduce((s, w) => s + w.minutes, 0));
   core.setOutput("cost", result.stats.reduce((s, w) => s + w.cost, 0).toFixed(2));
   core.setOutput("findings", result.findings.length);
+  core.setOutput("queue-p50-minutes", result.queue.p50Minutes);
+  core.setOutput("queue-p95-minutes", result.queue.p95Minutes);
   core.setOutput("report", md);
+
+  const maxQueue = Number(core.getInput("max-queue-minutes") || 0);
+  if (maxQueue > 0 && result.queue.p95Minutes > maxQueue) {
+    core.setFailed(`CI queue p95 wait is ${result.queue.p95Minutes} min, above max-queue-minutes (${maxQueue}).`);
+  }
 
   if (core.getBooleanInput("fail-on-findings") && result.findings.some((f) => f.level === "fix")) {
     core.setFailed(`CI Doctor found ${result.findings.length} issue(s). See the job summary.`);

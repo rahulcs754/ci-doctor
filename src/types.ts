@@ -23,6 +23,8 @@ export interface Job {
   name: string;
   status: string;
   conclusion: string | null;
+  /** When the job was queued. started_at - created_at = time waiting for a runner. */
+  created_at?: string | null;
   started_at: string | null;
   completed_at: string | null;
   labels: string[];
